@@ -1,46 +1,7 @@
 from collections import Counter
 import random
 
-CONTEXT_SIZE = 3  # 1 for bigram, 2 for trigram, etc.
-GENERATED_LENGTH = 500
-START_CHARS = "the"
-
-with open("data/input.txt", "r", encoding="utf-8") as f:
-    original_text = f.read()
-
-chars = []
-for char in original_text:
-    if char in chars:
-        continue
-    chars.append(char)
-
-sorted_chars = sorted(chars)
-
-
-def char_to_id(char: str) -> int:
-    if len(char) != 1:
-        raise ValueError(
-            "char_to_id function expects only a single character as the argument."
-        )
-    if char not in sorted_chars:
-        raise ValueError(f"Character {repr(char)} is not in the training data.")
-    return sorted_chars.index(char)
-
-
-def id_to_char(token_id: int) -> str:
-    if token_id < 0 or token_id > len(sorted_chars) - 1:
-        raise ValueError(
-            f"id_to_char function expects an integer between 0 and {len(sorted_chars) - 1}"
-        )
-    return sorted_chars[token_id]
-
-
-def encode_text(text: str) -> list[int]:
-    return [char_to_id(char) for char in text]
-
-
-def decode_text(encoded_data: list[int]) -> str:
-    return "".join(id_to_char(token_id) for token_id in encoded_data)
+from tokeniser import original_text, char_to_id, id_to_char, encode_text, decode_text
 
 
 def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:
@@ -100,7 +61,12 @@ def get_ngram_counts(text: str, context_size: int) -> dict:
     return ngram_counts
 
 
-ngram_counts = get_ngram_counts(original_text, CONTEXT_SIZE)
+if __name__ == "__main__":
+    CONTEXT_SIZE = 3  # 1 for bigram, 2 for trigram, etc.
+    GENERATED_LENGTH = 500
+    START_CHARS = "the"
 
-print("____Generated Text____")
-print(generate_text(START_CHARS, GENERATED_LENGTH, CONTEXT_SIZE, ngram_counts))
+    ngram_counts = get_ngram_counts(original_text, CONTEXT_SIZE)
+
+    print("____Generated Text____")
+    print(generate_text(START_CHARS, GENERATED_LENGTH, CONTEXT_SIZE, ngram_counts))
