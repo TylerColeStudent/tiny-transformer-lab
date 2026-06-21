@@ -10,5 +10,6 @@ Current progress:
 - Weighted random next-character sampling
 - Built PyTorch bigram model trained with cross-entropy loss and manual gradient descent.
 - Added mini-batch training for the PyTorch bigram model.
+- Implemented train/validation split and loss estimation.
 
 The current training text is "A Christmas Carol" by Charles Dickens, sourced from Standard Ebooks.
