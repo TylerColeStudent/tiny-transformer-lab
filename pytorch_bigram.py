@@ -1,5 +1,6 @@
 import torch
 import torch.nn.functional as F
+import random
 
 from tokeniser import original_text, char_to_id, id_to_char, encode_text, char_set
 
@@ -60,31 +61,45 @@ def generate_text_from_logits(
     return output
 
 
+def get_batch(data: torch.Tensor, batch_size: int) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sample a random batch of input-target pairs from the training text.
+
+    Args:
+        data: A Tensor of token IDs representing the training text.
+        batch_size: The desired number of input-target pairs.
+
+    Returns:
+        A tuple containing a Tensor of input tokens and a Tensor of target tokens.
+        Both tensors have shape [batch_size].
+    """
+    indices = torch.randint(data.shape[0] - 1, size=(batch_size,), device=data.device)
+    input_tensor = data[indices]
+    target_tensor = data[indices + 1]
+    return (input_tensor, target_tensor)
+
+
 if __name__ == "__main__":
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
-    LEARN_RATE = 10
-    STEPS = 500
+    LEARN_RATE = 2
+    BATCH_SIZE = 256
+    STEPS = 10000
+
+    print("Device: ", DEVICE)
 
     encoded_text = encode_text(original_text)
-
     data = torch.tensor(encoded_text, dtype=torch.long, device=DEVICE)
-
-    inputs = data[:-1]
-    targets = data[1:]
     vocab_size = len(char_set)
-
     bigram_scores = torch.zeros(
         vocab_size, vocab_size, dtype=torch.float32, device=DEVICE, requires_grad=True
     )
 
-    print("Device: ", DEVICE)
-
     for step in range(1, STEPS + 1):
         bigram_scores.grad = None
-        logits = bigram_scores[inputs]  # Shape: [len(encoded_text) - 1, vocab_size]
+        inputs, targets = get_batch(data, BATCH_SIZE)
+        logits = bigram_scores[inputs]  # Shape: [BATCH_SIZE, vocab_size]
         loss = F.cross_entropy(logits, targets)
 
-        # Calculate how each score should change to reduce the loss
+        # Calculate how each score should change to reduce the loss.
         loss.backward()
 
         with torch.no_grad():

@@ -8,6 +8,7 @@ Current progress:
 - Count-based bigram text generator
 - Generalised to an n-gram text generator
 - Weighted random next-character sampling
-- Built a PyTorch bigram model trained with cross-entropy loss and manual gradient descent.
+- Built PyTorch bigram model trained with cross-entropy loss and manual gradient descent.
+- Added mini-batch training for the PyTorch bigram model.
 
 The current training text is "A Christmas Carol" by Charles Dickens, sourced from Standard Ebooks.
