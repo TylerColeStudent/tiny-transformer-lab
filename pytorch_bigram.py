@@ -32,9 +32,7 @@ def sample_next_token_from_logits(input_token: int, bigram_logits: torch.Tensor)
     return int(output_token.item())
 
 
-def generate_text_from_logits(
-    start_chars: str, length: int, bigram_logits: torch.Tensor
-) -> str:
+def generate_text(start_chars: str, length: int, bigram_logits: torch.Tensor) -> str:
     """Generate a string of text using learned bigram logits.
 
     Args:
@@ -149,4 +147,5 @@ if __name__ == "__main__":
             print(f"Estimated training loss at step {step}: {train_loss:.3f}")
             print(f"Estimated validation loss at step {step}: {val_loss:.3f}")
 
-    print(generate_text_from_logits("S", 200, bigram_logits))
+    print("____Generated Text____")
+    print(generate_text("S", 200, bigram_logits))
