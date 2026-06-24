@@ -62,11 +62,11 @@ def get_batch(data: torch.Tensor, batch_size: int) -> tuple[torch.Tensor, torch.
     """Sample a random batch of input-target pairs from token data.
 
     Args:
-        data: A Tensor of token IDs representing text.
+        data: A tensor of token IDs representing text.
         batch_size: The desired number of input-target pairs.
 
     Returns:
-        A tuple containing a Tensor of input tokens and a Tensor of target tokens.
+        A tuple containing a tensor of input tokens and a tensor of target tokens.
         Both tensors have shape [batch_size].
     """
     indices = torch.randint(data.shape[0] - 1, size=(batch_size,), device=data.device)
@@ -109,7 +109,7 @@ if __name__ == "__main__":
     STEPS = 5000
     EVAL_TRIALS = 100
 
-    print("Device: ", DEVICE)
+    print("Device:", DEVICE)
 
     encoded_text = encode_text(original_text)
     cutoff = int(0.9 * len(encoded_text))

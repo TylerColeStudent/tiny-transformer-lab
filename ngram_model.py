@@ -21,7 +21,7 @@ def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:
     """
     if input_tokens not in ngram_counts:
         raise ValueError(
-            f"No next-token counts available for the input token(s): {input_tokens} "
+            f"No next-token counts available for the input token(s): {input_tokens}"
             f"(characters: {decode_text(list(input_tokens))})"
         )
 

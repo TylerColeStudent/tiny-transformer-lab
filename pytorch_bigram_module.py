@@ -56,7 +56,9 @@ class BigramModel(nn.Module):
             output = start_chars
 
             for _ in range(length):
-                input_tensor = torch.tensor(current_token, device=device)
+                input_tensor = torch.tensor(
+                    current_token, dtype=torch.long, device=device
+                )
                 token_scores = self(input_tensor)  # Shape: [vocab_size]
 
                 # Convert logits to probabilities before sampling.
@@ -107,7 +109,7 @@ if __name__ == "__main__":
     BATCH_SIZE = 1024
     EVAL_TRIALS = 100
 
-    print("Device: ", DEVICE)
+    print("Device:", DEVICE)
 
     encoded_text = encode_text(original_text)
     cutoff = int(0.9 * len(encoded_text))
