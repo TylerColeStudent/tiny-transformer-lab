@@ -3,13 +3,9 @@ DATA_PATH = "data/input.txt"
 with open(DATA_PATH, "r", encoding="utf-8") as f:
     original_text = f.read()
 
-chars = []
-for char in original_text:
-    if char in chars:
-        continue
-    chars.append(char)
+char_set = sorted(set(original_text))
 
-char_set = sorted(chars)
+char_to_id_map = {char: i for i, char in enumerate(char_set)}
 
 
 def char_to_id(char: str) -> int:
@@ -29,9 +25,9 @@ def char_to_id(char: str) -> int:
         raise ValueError(
             "char_to_id function expects only a single character as the argument."
         )
-    if char not in char_set:
+    if char not in char_to_id_map:
         raise ValueError(f"Character {repr(char)} is not in the known character set.")
-    return char_set.index(char)
+    return char_to_id_map[char]
 
 
 def id_to_char(token_id: int) -> str:
