@@ -13,5 +13,6 @@ Current progress:
 - Implemented train/validation split and loss estimation
 - Added an nn.Module version of the PyTorch bigram model, trained with the AdamW optimiser
 - Added a Multi-Layer Perceptron language model using embeddings and a hidden layer
+- Added an auto-regressive, decoder-only transformer with causal self-attention and pre-normalisation
 
 The current training text is "A Christmas Carol" by Charles Dickens, sourced from Standard Ebooks.

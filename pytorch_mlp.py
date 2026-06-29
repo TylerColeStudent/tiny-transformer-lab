@@ -15,7 +15,7 @@ class MLPLanguageModel(nn.Module):
 
     Args:
         vocab_size: The number of unique characters in the dataset.
-        embedding_dim: The number of dimensions of space that the characters should
+        embedding_dim: The number of dimensions of the space that the characters should
             be embedded in.
         context_length: The number of tokens in each sequence, all of which are
             considered in predicting the next token.
