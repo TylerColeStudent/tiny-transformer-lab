@@ -1,7 +1,13 @@
 from collections import Counter
 import random
 
-from tokeniser import original_text, char_to_id, id_to_char, encode_text, decode_text
+from data_pipeline import (
+    original_text,
+    char_to_id,
+    id_to_char,
+    encode_text,
+    decode_text,
+)
 
 
 def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:

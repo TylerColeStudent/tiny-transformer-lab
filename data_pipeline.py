@@ -1,3 +1,5 @@
+import torch
+
 DATA_PATH = "data/input.txt"
 
 with open(DATA_PATH, "r", encoding="utf-8") as f:
@@ -77,6 +79,38 @@ def decode_text(encoded_data: list[int]) -> str:
         ValueError: If any token ID in 'encoded_data' is outside the valid token ID range.
     """
     return "".join(id_to_char(token_id) for token_id in encoded_data)
+
+
+def get_batch(
+    data: torch.Tensor, context_length: int, batch_size: int
+) -> tuple[torch.Tensor, torch.Tensor]:
+    """Sample a random batch of context windows and corresponding next tokens.
+
+    Args:
+        data: A tensor of token IDs representing the text.
+        context_length: The number of previous tokens used to predict the next token.
+        batch_size: The number of token sequences to sample.
+
+    Returns:
+        A tuple of tensors. The first tensor contains input token sequences, with
+        shape [batch_size, context_length], and the second tensor contains the
+        corresponding target token sequences, with shape [batch_size, context_length].
+    """
+    start_indices = torch.randint(
+        data.shape[0] - context_length, size=(batch_size,), device=data.device
+    )
+    context_offsets = torch.arange(context_length, device=data.device)
+
+    # Broadcasting shapes:
+    # [batch_size, 1] + [context_length] -> [batch_size, context_length]
+    input_indices = start_indices.unsqueeze(1) + context_offsets
+
+    # The target token is the same sequence as x, shifted once into the future.
+    target_indices = input_indices + 1
+
+    input_tensor = data[input_indices]
+    target_tensor = data[target_indices]
+    return (input_tensor, target_tensor)
 
 
 if __name__ == "__main__":

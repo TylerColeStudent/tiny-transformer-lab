@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from tokeniser import original_text, char_to_id, id_to_char, encode_text, char_set
+from data_pipeline import original_text, char_to_id, id_to_char, encode_text, char_set
 
 
 def sample_next_token_from_logits(input_token: int, bigram_logits: torch.Tensor) -> int:

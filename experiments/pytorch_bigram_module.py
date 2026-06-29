@@ -2,8 +2,8 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from tokeniser import encode_text, original_text, char_set, char_to_id, id_to_char
-from pytorch_bigram import get_batch
+from data_pipeline import encode_text, original_text, char_set, char_to_id, id_to_char
+from experiments.pytorch_bigram import get_batch
 
 
 class BigramModel(nn.Module):

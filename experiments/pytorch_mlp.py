@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from tokeniser import encode_text, id_to_char, char_set, original_text
+from data_pipeline import encode_text, id_to_char, char_set, original_text
 
 
 class MLPLanguageModel(nn.Module):
