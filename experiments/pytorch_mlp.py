@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_pipeline import encode_text, id_to_char, char_set, original_text
+from data_pipeline import CharacterTokeniser
 
 
 class MLPLanguageModel(nn.Module):
@@ -14,24 +14,29 @@ class MLPLanguageModel(nn.Module):
     an output layer that produces next-token logits.
 
     Args:
-        vocab_size: The number of unique characters in the dataset.
         embedding_dim: The number of dimensions of the space that the characters should
             be embedded in.
         context_length: The number of tokens in each sequence, all of which are
             considered in predicting the next token.
         hidden_size: The number of neurons in the hidden layer.
+        tokeniser: The CharacterTokeniser instance used for encoding and decoding.
     """
 
     def __init__(
-        self, vocab_size: int, embedding_dim: int, context_length: int, hidden_size: int
+        self,
+        embedding_dim: int,
+        context_length: int,
+        hidden_size: int,
+        tokeniser: CharacterTokeniser,
     ) -> None:
         super().__init__()
 
+        self.tokeniser = tokeniser
         self.context_length = context_length
 
-        self.embedding = nn.Embedding(vocab_size, embedding_dim)
+        self.embedding = nn.Embedding(tokeniser.vocab_size, embedding_dim)
         self.hidden = nn.Linear(context_length * embedding_dim, hidden_size)
-        self.output = nn.Linear(hidden_size, vocab_size)
+        self.output = nn.Linear(hidden_size, tokeniser.vocab_size)
 
     def forward(self, input_tokens: torch.Tensor) -> torch.Tensor:
         """Get next-token logits for a batch of token sequences.
@@ -86,7 +91,9 @@ class MLPLanguageModel(nn.Module):
         with torch.no_grad():
 
             # Consider the most recent tokens.
-            context_tokens = encode_text(start_chars[-self.context_length :])
+            context_tokens = self.tokeniser.encode_text(
+                start_chars[-self.context_length :]
+            )
             output = start_chars
 
             for _ in range(length):
@@ -103,7 +110,7 @@ class MLPLanguageModel(nn.Module):
                 # Shape: [1, vocab_size]
 
                 next_token = int(torch.multinomial(next_token_probs, 1).item())
-                output += id_to_char(next_token)
+                output += self.tokeniser.id_to_char(next_token)
 
                 # Slide the context window forward.
                 context_tokens.append(next_token)
@@ -185,19 +192,23 @@ if __name__ == "__main__":
     EMBEDDING_DIM = 10
     CONTEXT_LENGTH = 8
     HIDDEN_SIZE = 100
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
 
     print("Device:", DEVICE)
 
-    encoded_text = encode_text(original_text)
+    encoded_text = tokeniser.encode_text(original_text)
     cutoff = int(0.9 * len(encoded_text))
     train_tokens = encoded_text[:cutoff]
     val_tokens = encoded_text[cutoff:]
     train_data = torch.tensor(train_tokens, dtype=torch.long, device=DEVICE)
     val_data = torch.tensor(val_tokens, dtype=torch.long, device=DEVICE)
 
-    vocab_size = len(char_set)
-
-    model = MLPLanguageModel(vocab_size, EMBEDDING_DIM, CONTEXT_LENGTH, HIDDEN_SIZE)
+    model = MLPLanguageModel(EMBEDDING_DIM, CONTEXT_LENGTH, HIDDEN_SIZE, tokeniser)
     model.to(DEVICE)
 
     loss_function = nn.CrossEntropyLoss()

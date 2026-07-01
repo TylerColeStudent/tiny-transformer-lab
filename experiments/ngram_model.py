@@ -1,13 +1,7 @@
 from collections import Counter
 import random
 
-from data_pipeline import (
-    original_text,
-    char_to_id,
-    id_to_char,
-    encode_text,
-    decode_text,
-)
+from data_pipeline import CharacterTokeniser
 
 
 def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:
@@ -28,7 +22,7 @@ def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:
     if input_tokens not in ngram_counts:
         raise ValueError(
             f"No next-token counts available for the input token(s): {input_tokens}"
-            f"(characters: {decode_text(list(input_tokens))})"
+            f"(characters: {tokeniser.decode_text(list(input_tokens))})"
         )
 
     next_token_counts = ngram_counts[input_tokens]
@@ -42,7 +36,7 @@ def sample_next_token(input_tokens: tuple[int, ...], ngram_counts: dict) -> int:
 
     raise RuntimeError(
         f"Failed to sample a next token for the input token(s): {input_tokens} "
-        f"(characters: {decode_text(list(input_tokens))})"
+        f"(characters: {tokeniser.decode_text(list(input_tokens))})"
     )
 
 
@@ -70,7 +64,7 @@ def generate_text(
     if len(start_chars) < context_size:
         raise ValueError("Not enough initial context provided.")
 
-    tokens = [char_to_id(char) for char in start_chars]
+    tokens = tokeniser.encode_text(start_chars)
     context = tokens[-context_size:]  # Keep only the most recent context tokens.
     output = start_chars
 
@@ -78,7 +72,7 @@ def generate_text(
         # Use a sliding context window.
         context.append(sample_next_token(tuple(context), ngram_counts))
         context.pop(0)
-        output += id_to_char(context[-1])
+        output += tokeniser.id_to_char(context[-1])
 
     return output
 
@@ -98,7 +92,7 @@ def get_ngram_counts(text: str, context_size: int) -> dict:
     Raises:
         ValueError: If a character in 'text' is not in the known character set.
     """
-    encoded_text = encode_text(text)
+    encoded_text = tokeniser.encode_text(text)
     ngram_counts = {}
 
     # Slide a context window through the text and count which token follows it.
@@ -116,6 +110,12 @@ if __name__ == "__main__":
     CONTEXT_SIZE = 3  # 1 for bigram, 2 for trigram, etc.
     GENERATED_LENGTH = 500
     START_CHARS = "Scr"
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
 
     ngram_counts = get_ngram_counts(original_text, CONTEXT_SIZE)
 

@@ -1,7 +1,7 @@
 import torch
 import torch.nn.functional as F
 
-from data_pipeline import original_text, char_to_id, id_to_char, encode_text, char_set
+from data_pipeline import CharacterTokeniser
 
 
 def sample_next_token_from_logits(input_token: int, bigram_logits: torch.Tensor) -> int:
@@ -49,11 +49,11 @@ def generate_text(start_chars: str, length: int, bigram_logits: torch.Tensor) ->
             character set.
     """
     with torch.no_grad():
-        current_token = char_to_id(start_chars[-1])
+        current_token = tokeniser.char_to_id(start_chars[-1])
         output = start_chars
         for _ in range(length):
             next_token = sample_next_token_from_logits(current_token, bigram_logits)
-            output += id_to_char(next_token)
+            output += tokeniser.id_to_char(next_token)
             current_token = next_token
     return output
 
@@ -108,17 +108,23 @@ if __name__ == "__main__":
     BATCH_SIZE = 1024
     STEPS = 5000
     EVAL_TRIALS = 100
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
 
     print("Device:", DEVICE)
 
-    encoded_text = encode_text(original_text)
+    encoded_text = tokeniser.encode_text(original_text)
     cutoff = int(0.9 * len(encoded_text))
     train_tokens = encoded_text[:cutoff]
     val_tokens = encoded_text[cutoff:]
     train_data = torch.tensor(train_tokens, dtype=torch.long, device=DEVICE)
     val_data = torch.tensor(val_tokens, dtype=torch.long, device=DEVICE)
 
-    vocab_size = len(char_set)
+    vocab_size = tokeniser.vocab_size
     bigram_logits = torch.zeros(
         vocab_size, vocab_size, dtype=torch.float32, device=DEVICE, requires_grad=True
     )

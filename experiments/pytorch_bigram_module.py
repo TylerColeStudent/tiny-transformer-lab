@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_pipeline import encode_text, original_text, char_set, char_to_id, id_to_char
+from data_pipeline import CharacterTokeniser
 from experiments.pytorch_bigram import get_batch
 
 
@@ -13,12 +13,13 @@ class BigramModel(nn.Module):
     token using a learned embedding lookup table.
 
     Args:
-        vocab_size: The number of unique tokens in the dataset.
+        tokeniser: The CharacterTokeniser instance used for encoding and decoding.
     """
 
-    def __init__(self, vocab_size: int) -> None:
+    def __init__(self, tokeniser: CharacterTokeniser) -> None:
         super().__init__()
-        self.token_table = nn.Embedding(vocab_size, vocab_size)
+        self.tokeniser = tokeniser
+        self.token_table = nn.Embedding(tokeniser.vocab_size, tokeniser.vocab_size)
 
     def forward(self, input_tokens: torch.Tensor) -> torch.Tensor:
         """Get next-token logits for a sequence of input tokens.
@@ -52,7 +53,7 @@ class BigramModel(nn.Module):
         # Use the same device as the model's parameters.
         device = next(self.parameters()).device
         with torch.no_grad():
-            current_token = char_to_id(start_chars[-1])
+            current_token = self.tokeniser.char_to_id(start_chars[-1])
             output = start_chars
 
             for _ in range(length):
@@ -64,7 +65,7 @@ class BigramModel(nn.Module):
                 # Convert logits to probabilities before sampling.
                 token_probs = torch.softmax(token_scores, dim=0)  # Shape: [vocab_size]
                 next_token = int(torch.multinomial(token_probs, 1).item())
-                output += id_to_char(next_token)
+                output += self.tokeniser.id_to_char(next_token)
                 current_token = next_token
 
         return output
@@ -108,19 +109,23 @@ if __name__ == "__main__":
     STEPS = 5000
     BATCH_SIZE = 1024
     EVAL_TRIALS = 100
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
 
     print("Device:", DEVICE)
 
-    encoded_text = encode_text(original_text)
+    encoded_text = tokeniser.encode_text(original_text)
     cutoff = int(0.9 * len(encoded_text))
     train_tokens = encoded_text[:cutoff]
     val_tokens = encoded_text[cutoff:]
     train_data = torch.tensor(train_tokens, dtype=torch.long, device=DEVICE)
     val_data = torch.tensor(val_tokens, dtype=torch.long, device=DEVICE)
 
-    vocab_size = len(char_set)
-
-    model = BigramModel(vocab_size)
+    model = BigramModel(tokeniser)
     model.to(DEVICE)
 
     loss_function = nn.CrossEntropyLoss()

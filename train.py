@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.optim as optim
 
-from data_pipeline import original_text, encode_text, char_set, get_batch
+from data_pipeline import CharacterTokeniser, get_batch
 from transformer_model import TransformerLanguageModel
 
 
@@ -26,6 +26,7 @@ def estimate_loss(
     Returns:
         The average loss across 'trials' different batches, as a floating point number.
     """
+    was_training = model.training
     total_loss = 0
     model.eval()
     with torch.no_grad():
@@ -35,29 +36,39 @@ def estimate_loss(
             loss = loss_func(logits.flatten(0, 1), targets.flatten(0, 1))
             total_loss += loss.item()
 
+    if was_training:
+        model.train()
     return total_loss / trials
 
 
-def main():
+def train_model(encoded_text: list[int], vocab_size: int) -> TransformerLanguageModel:
+    """Train a transformer language model on encoded text data.
+
+    Args:
+        encoded_text: The full dataset encoded as a list of token IDs.
+        vocab_size: The number of unique tokens in the tokeniser vocabulary.
+
+    Returns:
+        The fully trained TransformerLanguageModel instance.
+    """
     DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
     LEARN_RATE = 1e-3
-    STEPS = 1000
+    STEPS = 500
     BATCH_SIZE = 256
-    EVAL_TRIALS = 100
+    EVAL_TRIALS = 20
     EMBEDDING_DIM = 64
     CONTEXT_LENGTH = 64
     HIDDEN_SIZE = 256
     NUM_OF_HEADS = 4
     NUM_OF_BLOCKS = 8
 
-    encoded_text = encode_text(original_text)
+    print("Device: ", DEVICE)
+
     cutoff = int(0.9 * len(encoded_text))
     train_tokens = encoded_text[:cutoff]
     val_tokens = encoded_text[cutoff:]
     train_data = torch.tensor(train_tokens, dtype=torch.long, device=DEVICE)
     val_data = torch.tensor(val_tokens, dtype=torch.long, device=DEVICE)
-
-    vocab_size = len(char_set)
 
     model = TransformerLanguageModel(
         vocab_size,
@@ -98,14 +109,20 @@ def main():
 
 
 if __name__ == "__main__":
-    model = main()
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
+    encoded_text = tokeniser.encode_text(original_text)
+
+    model = train_model(encoded_text, tokeniser.vocab_size)
     device = next(model.parameters()).device
 
-    s = "Marley was dead, to begin with. There is no doubt whatever about that. The register of his burial was signed by the clergyman"
+    start_chars = "Scrooge "
+    start_tokens = tokeniser.encode_text(start_chars)
+    initial_context = torch.tensor(start_tokens, dtype=torch.long, device=device)
+
     print("____Generated Text____")
-    print(
-        model.generate(
-            torch.tensor(encode_text(s), dtype=torch.long, device=device),
-            500,
-        )
-    )
+    print(tokeniser.decode_text(model.generate(initial_context, 500)))

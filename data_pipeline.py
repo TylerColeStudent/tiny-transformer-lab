@@ -1,84 +1,115 @@
 import torch
 
-DATA_PATH = "data/input.txt"
 
-with open(DATA_PATH, "r", encoding="utf-8") as f:
-    original_text = f.read()
-
-char_set = sorted(set(original_text))
-
-char_to_id_map = {char: i for i, char in enumerate(char_set)}
-
-
-def char_to_id(char: str) -> int:
-    """Return the token ID corresponding to a single character.
+class CharacterTokeniser:
+    """
+    A character-level tokeniser for encoding and decoding text.
 
     Args:
-        char: A single character from the known character set.
-
-    Returns:
-        The integer token ID for the character.
-
-    Raises:
-        ValueError: If 'char' is not a single character.
-        ValueError: If 'char' is not in the known character set.
+        text: The training text used to build the character set.
     """
-    if len(char) != 1:
-        raise ValueError(
-            "char_to_id function expects only a single character as the argument."
-        )
-    if char not in char_to_id_map:
-        raise ValueError(f"Character {repr(char)} is not in the known character set.")
-    return char_to_id_map[char]
 
+    def __init__(self, text: str) -> None:
+        self.char_set = sorted(set(text))
+        self.vocab_size = len(self.char_set)
 
-def id_to_char(token_id: int) -> str:
-    """Return the character corresponding to a token ID.
+        self.char_to_id_map = {char: i for i, char in enumerate(self.char_set)}
+        self.id_to_char_map = {i: char for i, char in enumerate(self.char_set)}
 
-    Args:
-        token_id: The integer token ID. Must be between 0 and len(char_set) - 1.
+    def char_to_id(self, char: str) -> int:
+        """Return the token ID corresponding to a single character.
 
-    Returns:
-        The single-character string represented by the token ID.
+        Args:
+            char: A single character from the known character set.
 
-    Raises:
-        ValueError: If token_id is outside the valid token ID range.
-    """
-    if token_id < 0 or token_id > len(char_set) - 1:
-        raise ValueError(
-            f"token_id must be between 0 and {len(char_set) - 1}, got {token_id}."
-        )
-    return char_set[token_id]
+        Returns:
+            The integer token ID for the character.
 
+        Raises:
+            TypeError: If 'char' is not a string.
+            ValueError: If 'char' is not a single character.
+            ValueError: If 'char' is not in the known character set.
+        """
+        try:
+            return self.char_to_id_map[char]
 
-def encode_text(text: str) -> list[int]:
-    """Encode text into a list of token IDs.
+        except KeyError:
+            if not isinstance(char, str):
+                raise TypeError(
+                    f"char_to_id expects a string, got {type(char).__name__}."
+                )
+            if len(char) != 1:
+                raise ValueError(
+                    "char_to_id expects only a single character as the argument."
+                )
+            else:
+                raise ValueError(
+                    f"Character {repr(char)} is not in the known character set."
+                )
 
-    Args:
-        text: The text to encode.
+    def id_to_char(self, token_id: int) -> str:
+        """Return the character corresponding to a token ID.
 
-    Returns:
-        A list of integer token IDs which represent the full text.
+        Args:
+            token_id: The integer token ID. Must be between 0 and vocab_size - 1.
 
-    Raises:
-        ValueError: If any character in 'text' is not in the known character set.
-    """
-    return [char_to_id(char) for char in text]
+        Returns:
+            The single-character string represented by the token ID.
 
+        Raises:
+            TypeError: If token_id is not an integer.
+            ValueError: If token_id is outside the valid token ID range.
+        """
+        try:
+            return self.id_to_char_map[token_id]
+        except KeyError:
+            if not isinstance(token_id, int):
+                raise TypeError(
+                    f"id_to_char expects an integer, got {type(token_id).__name__}"
+                )
+            raise ValueError(
+                f"token_id must be between 0 and {self.vocab_size - 1}, got {token_id}."
+            )
 
-def decode_text(encoded_data: list[int]) -> str:
-    """Decode a list of token IDs into human-readable text.
+    def encode_text(self, text: str) -> list[int]:
+        """Encode text into a list of token IDs.
 
-    Args:
-        encoded_data: The list of integer token IDs to decode.
+        Args:
+            text: The string of text to encode.
 
-    Returns:
-        A string of characters corresponding to the list of token IDs.
+        Returns:
+            A list of integer token IDs which represent the full text.
 
-    Raises:
-        ValueError: If any token ID in 'encoded_data' is outside the valid token ID range.
-    """
-    return "".join(id_to_char(token_id) for token_id in encoded_data)
+        Raises:
+            ValueError: If any character in 'text' is not in the known character set.
+        """
+        try:
+            return [self.char_to_id_map[char] for char in text]
+        except KeyError as e:
+            raise ValueError(
+                f"Character {repr(e.args[0])} is not in the known character set."
+            )
+
+    def decode_text(self, encoded_data: list[int]) -> str:
+        """Decode a list of token IDs into human-readable text.
+
+        Args:
+            encoded_data: The list of integer token IDs to decode.
+
+        Returns:
+            A string of characters corresponding to the list of token IDs.
+
+        Raises:
+            ValueError: If any token ID in 'encoded_data' is outside the
+                valid token ID range.
+        """
+        try:
+            return "".join(self.id_to_char_map[token_id] for token_id in encoded_data)
+        except KeyError as e:
+            max_id = self.vocab_size - 1
+            raise ValueError(
+                f"token_id must be between 0 and {max_id}, got {e.args[0]}."
+            )
 
 
 def get_batch(
@@ -114,11 +145,18 @@ def get_batch(
 
 
 if __name__ == "__main__":
-    if original_text == decode_text(encode_text(original_text)):
+    DATA_PATH = "data/input.txt"
+
+    with open(DATA_PATH, "r", encoding="utf-8") as f:
+        original_text = f.read()
+
+    tokeniser = CharacterTokeniser(original_text)
+
+    if original_text == tokeniser.decode_text(tokeniser.encode_text(original_text)):
         print("TOKENISER SUCCESSFUL")
     else:
         print("TOKENISER FAILED")
 
     print("dataset length: ", len(original_text))
-    print("vocabulary size: ", len(char_set))
-    print("unique characters (alphabetised): ", char_set)
+    print("vocabulary size: ", tokeniser.vocab_size)
+    print("unique characters (alphabetised): ", tokeniser.char_set)

@@ -16,3 +16,18 @@ Current progress:
 - Added an auto-regressive, decoder-only transformer with causal self-attention and pre-normalisation
 
 The current training text is "A Christmas Carol" by Charles Dickens, sourced from Standard Ebooks.
+
+
+## Running the project
+
+The main transformer training script can be run directly from the project root:
+
+```bash
+python train.py
+```
+
+The files in `experiments/` are archived learning experiments. If running them, use module syntax from the project root, for example:
+
+```bash
+python -m experiments.ngram_model
+```

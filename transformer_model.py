@@ -3,8 +3,6 @@ import torch.nn as nn
 import torch.nn.functional as F
 import math
 
-from data_pipeline import decode_text
-
 
 class TransformerLanguageModel(nn.Module):
     """An autoregressive, decoder-only transformer language model built in PyTorch.
@@ -101,7 +99,7 @@ class TransformerLanguageModel(nn.Module):
         logits = self.output(x)
         return logits  # Shape: [batch_size, sequence_len, vocab_size]
 
-    def generate(self, context: torch.Tensor, length: int) -> str:
+    def generate(self, context: torch.Tensor, length: int) -> list[int]:
         """
         Generate text using the model's learned logits.
 
@@ -111,7 +109,7 @@ class TransformerLanguageModel(nn.Module):
             length: The number of additional tokens to generate
 
         Returns:
-            A single string of the context followed by the generated characters.
+            A list of the initial context followed by the generated token IDs.
         """
         was_training = self.training
         self.eval()
@@ -132,7 +130,7 @@ class TransformerLanguageModel(nn.Module):
 
         if was_training:
             self.train()
-        return decode_text(context.tolist())
+        return context.tolist()
 
 
 class Head(nn.Module):
