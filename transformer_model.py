@@ -21,8 +21,8 @@ class TransformerLanguageModel(nn.Module):
         vocab_size: The number of unique tokens in the dataset.
         embedding_dim: The number of dimensions of the space that the tokens should
             be embedded in.
-        context_length: The number of tokens in each sequence, all of which are
-            considered in predicting the next token.
+        context_length: The maximum number of tokens in the sequence used to predict
+            the next token.
         num_of_heads: The number of distinct attention heads used in each block
         hidden_size: The number of neurons in the hidden layer of each FeedForward
             network.
@@ -53,7 +53,7 @@ class TransformerLanguageModel(nn.Module):
 
         self.blocks = nn.ModuleList(
             [
-                Block(embedding_dim, num_of_heads, hidden_size)
+                Block(embedding_dim, num_of_heads, hidden_size, context_length)
                 for _ in range(num_of_blocks)
             ]
         )
@@ -63,32 +63,43 @@ class TransformerLanguageModel(nn.Module):
         Get next-token logits for every position in the input token sequence.
 
         Args:
-            input_tokens: A tensor of shape [batch_size, context_length] containing
+            input_tokens: A tensor of shape [batch_size, sequence_len] containing
                 token IDs.
 
         Returns:
-            A tensor of shape [batch_size, context_length, vocab_size] containing
-            the learned next-token logits for every token in the sequence.
+            A tensor of shape [batch_size, sequence_len, vocab_size] containing
+            the next-token logits for every token in the sequence.
+
+        Raises:
+            ValueError: If the token sequences are longer than the model's maximum
+                context length.
         """
+        if input_tokens.shape[1] > self.context_length:
+            raise ValueError(
+                f"Token sequences must not be longer than {self.context_length} "
+                f"tokens. Got sequence_len: {input_tokens.shape[1]}"
+            )
+
+        sequence_len = input_tokens.shape[1]
+
         token_embeddings = self.token_embedding(input_tokens)
-        # Shape: [batch_size, context_length, embedding_dim]
+        # Shape: [batch_size, sequence_len, embedding_dim]
 
-        current_context_length = min(input_tokens.shape[1], self.context_length)
-        pos_indices = torch.arange(current_context_length, device=input_tokens.device)
+        pos_indices = torch.arange(sequence_len, device=input_tokens.device)
         pos_embeddings = self.pos_embedding(pos_indices)
-        # Shape: [context_length, embedding_dim]
+        # Shape: [sequence_len, embedding_dim]
 
-        # Construct a single tensor combining semantic meaning with spatial position.
+        # Construct a single tensor combining semantic meaning with sequence position.
         x = token_embeddings + pos_embeddings
-        # Shape: [batch_size, context_length, embedding_dim]
+        # Shape: [batch_size, sequence_len, embedding_dim]
 
         for block in self.blocks:
             x = block(x)
-        # Shape: [batch_size, context_length, embedding_dim]
+        # Shape: [batch_size, sequence_len, embedding_dim]
 
         x = self.norm(x)
         logits = self.output(x)
-        return logits  # Shape: [batch_size, context_length, vocab_size]
+        return logits  # Shape: [batch_size, sequence_len, vocab_size]
 
     def generate(self, context: torch.Tensor, length: int) -> str:
         """
@@ -106,10 +117,8 @@ class TransformerLanguageModel(nn.Module):
         self.eval()
         with torch.no_grad():
             for _ in range(length):
-                if context.shape[0] > self.context_length:
-                    current_context = context[-self.context_length :]
-                else:
-                    current_context = context
+                current_context = context[-self.context_length :]
+
                 logits = self(current_context.unsqueeze(0))
 
                 next_token_logits = logits[:, -1, :]
@@ -130,14 +139,21 @@ class Head(nn.Module):
     """
     A class representing a single attention head for a transformer language model.
 
+    It implements the Scaled Dot-Product Attention formula from the original
+    "Attention is All You Need" paper.
+
     Args:
-        embedding_dim: The number of dimensions of the space that the characters should
+        embedding_dim: The number of dimensions of the space that the tokens should
             be embedded in.
         head_dim: The number of dimensions of space used for the attention queries,
             keys, and values.
+        context_length: The maximum number of tokens in the sequence used to predict
+            the next token.
     """
 
-    def __init__(self, embedding_dim: int, head_dim: int) -> None:
+    mask: torch.Tensor
+
+    def __init__(self, embedding_dim: int, head_dim: int, context_length: int) -> None:
         super().__init__()
 
         self.head_dim = head_dim
@@ -146,58 +162,63 @@ class Head(nn.Module):
         self.key = nn.Linear(embedding_dim, head_dim, bias=False)
         self.value = nn.Linear(embedding_dim, head_dim, bias=False)
 
+        self.register_buffer(
+            "mask",
+            torch.triu(
+                torch.ones((context_length, context_length), dtype=torch.bool),
+                diagonal=1,
+            ),
+            persistent=False,
+        )
+
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        Get the contextualised embeddings for a tensor of token embeddings.
+        Contextualise token embeddings with data from the current and preceding tokens.
 
         Args:
-            embeddings: A tensor of shape [batch_size, context_length, embedding_dim]
+            embeddings: A tensor of shape [batch_size, sequence_len, embedding_dim]
                 representing the tokens in a high-dimensionality space.
 
         Returns:
-            A tensor of shape [batch_size, context_length, head_dim] representing
+            A tensor of shape [batch_size, sequence_len, head_dim] representing
             contextualised embeddings for each token in the context window.
         """
+        sequence_len = embeddings.shape[1]
         query = self.query(embeddings)
         key = self.key(embeddings)
         value = self.value(embeddings)
-        # All have shape [batch_size, context_length, head_dim].
+        # All have shape [batch_size, sequence_len, head_dim].
 
-        weights = query @ key.transpose(1, 2)
-        # Shape: [batch_size, context_length, context_length]
+        logits = query @ key.transpose(1, 2)
+        # Shape: [batch_size, sequence_len, sequence_len]
 
-        weights /= math.sqrt(self.head_dim)  # Reduce variance to balance softmax.
+        logits /= math.sqrt(self.head_dim)  # Reduce variance to balance softmax.
 
         # Causal mask: hide future tokens to prevent look-ahead.
-        mask = torch.triu(
-            torch.ones(
-                (embeddings.shape[1], embeddings.shape[1]),
-                dtype=torch.bool,
-                device=embeddings.device,
-            ),
-            diagonal=1,
-        )
-        weights.masked_fill_(mask, float("-inf"))
+        mask = self.mask[:sequence_len, :sequence_len]
+        logits.masked_fill_(mask, float("-inf"))
 
-        # Convert raw values to a probability distribution.
-        weights = torch.softmax(weights, dim=-1)
+        # Convert raw logits to a probability distribution.
+        probs = torch.softmax(logits, dim=-1)
 
-        return weights @ value  # Shape: [batch_size, context_length, head_dim]
+        return probs @ value  # Shape: [batch_size, sequence_len, head_dim]
 
 
 class MultiHeadAttention(nn.Module):
     """
-    A class for running multiple attention heads in parallel.
+    A class for running multiple attention heads and combining their outputs.
 
     Args:
-        embedding_dim: The number of dimensions of the space that the characters should
+        embedding_dim: The number of dimensions of the space that the tokens should
             be embedded in.
-        num_of_heads: The number of distinct attention heads used in training the
-            transformer language model.
-
+        num_of_heads: The number of attention heads used in this attention layer.
+        context_length: The maximum number of tokens in the sequence used to predict
+            the next token.
     """
 
-    def __init__(self, embedding_dim: int, num_of_heads: int) -> None:
+    def __init__(
+        self, embedding_dim: int, num_of_heads: int, context_length: int
+    ) -> None:
         if embedding_dim % num_of_heads:
             raise ValueError(
                 f"embedding_dim must be divisible by num_of_heads. "
@@ -208,7 +229,7 @@ class MultiHeadAttention(nn.Module):
 
         head_dim = embedding_dim // num_of_heads
         self.heads = nn.ModuleList(
-            [Head(embedding_dim, head_dim) for _ in range(num_of_heads)]
+            [Head(embedding_dim, head_dim, context_length) for _ in range(num_of_heads)]
         )
         self.output = nn.Linear(embedding_dim, embedding_dim)
 
@@ -217,18 +238,18 @@ class MultiHeadAttention(nn.Module):
         Get a single tensor representing contextualised embeddings from multiple heads.
 
         Args:
-            embeddings: A tensor of shape [batch_size, context_length, embedding_dim]
+            embeddings: A tensor of shape [batch_size, sequence_len, embedding_dim]
                 representing the tokens in a high-dimensionality space.
 
         Returns:
-            A tensor of shape [batch_size, context_length, embedding_dim] representing
-            the combined contextualised embeddings for each token in the context window.
+            A tensor of shape [batch_size, sequence_len, embedding_dim] representing
+            the combined contextualised embeddings for each token in the sequence.
         """
         x = [h(embeddings) for h in self.heads]
-        # Shape of each element: [batch_size, context_length, head_dim]
+        # Shape of each element: [batch_size, sequence_len, head_dim]
 
         x = torch.cat(x, dim=-1)
-        # Shape: [batch_size, context_length, embedding_dim]
+        # Shape: [batch_size, sequence_len, embedding_dim]
 
         x = self.output(x)
         return x
@@ -236,10 +257,10 @@ class MultiHeadAttention(nn.Module):
 
 class FeedForward(nn.Module):
     """
-    A simple feed-forward neural network.
+    A simple feed-forward neural network used inside a transformer block.
 
     Args:
-        embedding_dim: The number of dimensions of the space that the characters should
+        embedding_dim: The number of dimensions of the space that the tokens should
             be embedded in.
         hidden_size: The number of neurons in the hidden layer.
     """
@@ -252,14 +273,14 @@ class FeedForward(nn.Module):
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
         """
-        Process the contextualised embeddings through a non-linear transformation.
+        Apply a non-linear transformation to each token embedding independently.
 
         Args:
-            embeddings: A tensor of shape [batch_size, context_length, embedding_dim]
-            representing the tokens in a high-dimensionality space.
+            embeddings: A tensor of shape [batch_size, sequence_len, embedding_dim]
+                representing the tokens in a high-dimensionality space.
 
         Returns:
-            A tensor of shape [batch_size, context_length, embedding_dim] containing
+            A tensor of shape [batch_size, sequence_len, embedding_dim] containing
             the transformed token embeddings.
         """
         x = self.hidden(embeddings)
@@ -274,28 +295,38 @@ class Block(nn.Module):
 
     The block consists of two sub-layers:
     1) Multi-head attention, where each token representation is updated using
-        information from previous positions.
+        information from the current and previous positions.
     2) A feed-forward network, where each token is individually passed through a
         non-linear transformation.
     Both sub-layers apply normalisation prior to computation, and residual connections
-    are utilised to improve gradient stability during backpropagation.
+    are used to improve gradient stability during backpropagation.
 
     Args:
-        embedding_dim: The number of dimensions of the space that the characters should
+        embedding_dim: The number of dimensions of the space that the tokens should
             be embedded in.
         num_of_heads: The number of attention heads in the multi-head attention part of
             the block.
         hidden_size: The number of neurons in the hidden layer of the feed-forward
             network section of the block.
+        context_length: The maximum number of tokens in the sequence used to predict
+            the next token.
     """
 
-    def __init__(self, embedding_dim: int, num_of_heads: int, hidden_size: int) -> None:
+    def __init__(
+        self,
+        embedding_dim: int,
+        num_of_heads: int,
+        hidden_size: int,
+        context_length: int,
+    ) -> None:
         super().__init__()
 
-        self.norm1 = nn.LayerNorm(embedding_dim)
-        self.norm2 = nn.LayerNorm(embedding_dim)
+        self.attention_norm = nn.LayerNorm(embedding_dim)
+        self.feed_forward_norm = nn.LayerNorm(embedding_dim)
 
-        self.multi_head_attention = MultiHeadAttention(embedding_dim, num_of_heads)
+        self.multi_head_attention = MultiHeadAttention(
+            embedding_dim, num_of_heads, context_length
+        )
         self.feed_forward = FeedForward(embedding_dim, hidden_size)
 
     def forward(self, embeddings: torch.Tensor) -> torch.Tensor:
@@ -303,22 +334,23 @@ class Block(nn.Module):
         Process token embeddings through the attention and feed-forward sub-layers.
 
         Args:
-            embeddings: A tensor of shape [batch_size, context_length, embedding_dim]
+            embeddings: A tensor of shape [batch_size, sequence_len, embedding_dim]
                 representing the tokens in a high-dimensionality space.
 
         Returns:
-            A tensor of shape [batch_size, context_length, embedding_dim] containing
+            A tensor of shape [batch_size, sequence_len, embedding_dim] containing
             the updated representations of the tokens.
         """
         # Pre-normalisation keeps activations on a more stable scale before attention.
-        x = self.norm1(embeddings)
+        x = self.attention_norm(embeddings)
         x = self.multi_head_attention(x)
 
         # Update the existing representation rather than replacing it entirely,
         # to preserve the original information and improve gradient flow.
         residual = x + embeddings
 
-        x = self.norm2(residual)
+        # Process each token embedding individually after normalising again.
+        x = self.feed_forward_norm(residual)
         x = self.feed_forward(x)
         residual = residual + x
         return residual
